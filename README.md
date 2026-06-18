@@ -338,7 +338,7 @@ Suggested flow:
 | Professor route returns 403 | Token belongs to a professor user |
 | Booking route returns 403 | Token belongs to a student user |
 | Availability update fails | Slot is free, owned by professor, and does not overlap another slot |
-| DocumentDB connection fails | Security groups, TLS bundle, credentials, and `retryWrites=false` |
+
 
 ## EC2 Postman Quick Examples
 
