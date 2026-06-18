@@ -65,5 +65,3 @@ docker/
 # Local-only deployment/demo files
 .env.prod
 .env.*
-!.env.example
-seed.js
