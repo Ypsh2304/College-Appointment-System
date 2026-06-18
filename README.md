@@ -20,26 +20,27 @@ The service supports user registration, JWT login, professor availability manage
 
 ```mermaid
 flowchart TD
-    A[Client or Postman request] --> B[Express app in index.js]
-    B --> C[Security and request middleware]
-    C --> D{Route group}
-    D --> E[/users]
-    D --> F[/professor]
-    D --> G[/general]
-    E --> H[Register, login, profile]
-    F --> I[JWT check]
-    I --> J[Professor role check]
-    J --> K[Create, update, or cancel]
-    G --> L[JWT check]
-    L --> M{Student-only route?}
-    M -->|Yes| N[Student role check]
-    M -->|No| O[Availability lookup]
-    N --> P[Book or view appointments]
-    K --> Q[Mongoose models]
+    A["Postman or client request"] --> B["Express app - index.js"]
+    B --> C["JSON, Helmet, Morgan, CORS"]
+    C --> D{"Route group"}
+    D --> E["/users routes"]
+    D --> F["/professor routes"]
+    D --> G["/general routes"]
+    E --> H["user controller"]
+    F --> I["JWT check"]
+    I --> J["professor role check"]
+    J --> K["professor controller"]
+    G --> L["JWT check"]
+    L --> M{"student-only action"}
+    M -->|yes| N["student role check"]
+    M -->|no| O["availability lookup"]
+    N --> P["general controller"]
+    H --> Q["Mongoose models"]
+    K --> Q
     O --> Q
     P --> Q
-    Q --> R[MongoDB or Amazon DocumentDB]
-    R --> S[JSON response]
+    Q --> R["MongoDB or Amazon DocumentDB"]
+    R --> S["JSON response"]
 ```
 
 ## Business Logic
@@ -196,13 +197,50 @@ Stores a student booking.
 | `PATCH /professor/availability/:availabilityId` | `startTime`, `endTime` | ownership, free slot only, no booked appointment, no overlap |
 | `POST /general/book` | `professorId`, `time` | professor exists, time is inside availability, time is not already booked |
 
-Common response patterns:
+## Common Response Patterns
 
 - Login returns `token`, `id`, `name`, and `role`.
 - Availability APIs return slot id, professor name, `startTimeUtc`, and `endTimeUtc`.
 - Booking returns appointment id, student name, professor name, UTC time, and status.
 - Empty student appointment lookup returns `appointments: []`.
 - Errors return `{ "message": "..." }`.
+
+## Copy-Paste Commands
+
+Local run:
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Windows PowerShell:
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Production-style local start:
+
+```bash
+npm start
+```
+
+EC2 run:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y git nodejs npm
+git clone <repository-url>
+cd UnQue-2.0-main
+npm ci --omit=dev
+cp .env.example .env
+curl -fsSLo global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+npm start
+```
 
 ## Local Setup
 
@@ -213,37 +251,7 @@ Requirements:
 - MongoDB
 - Postman or another REST client
 
-Install dependencies:
-
-```bash
-npm install
-```
-
-Create a local config file:
-
-```bash
-cp .env.example .env
-```
-
-PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Fill the local `.env` file with the required values from `.env.example`.
-
-Start development server:
-
-```bash
-npm run dev
-```
-
-Start normal server:
-
-```bash
-npm start
-```
+Use the local command block in **Copy-Paste Commands**, then fill the local `.env` file with the required values from `.env.example`.
 
 Base URL:
 
@@ -255,28 +263,7 @@ http://localhost:5001
 
 The same API can run on EC2 and connect to Amazon DocumentDB when `USE_DOCDB=true`.
 
-Basic EC2 commands:
-
-```bash
-sudo dnf update -y
-sudo dnf install -y git nodejs npm
-git clone <repository-url>
-cd UnQue-2.0-main
-npm ci --omit=dev
-cp .env.example .env
-```
-
-Download the Amazon trust bundle for DocumentDB TLS:
-
-```bash
-curl -fsSLo global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-```
-
-Start:
-
-```bash
-npm start
-```
+Use the EC2 command block in **Copy-Paste Commands**, then update the EC2 `.env` file with the DocumentDB connection values.
 
 Background run:
 
