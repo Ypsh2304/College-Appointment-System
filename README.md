@@ -339,3 +339,238 @@ Suggested flow:
 | Booking route returns 403 | Token belongs to a student user |
 | Availability update fails | Slot is free, owned by professor, and does not overlap another slot |
 | DocumentDB connection fails | Security groups, TLS bundle, credentials, and `retryWrites=false` |
+
+## EC2 Postman Quick Examples
+
+Use these examples after the API is running on EC2 with PM2 and connected to Amazon DocumentDB.
+
+Base URL:
+
+```text
+http://<EC2_PUBLIC_IPV4>:5001
+```
+
+In Postman, choose:
+
+```text
+Body -> raw -> JSON
+```
+
+For protected routes, choose:
+
+```text
+Authorization -> Type: Bearer Token -> paste only the JWT token value
+```
+
+Do not paste `Bearer ` manually when using Postman's Bearer Token field.
+
+### 1. Register A Professor
+
+```text
+POST {{baseUrl}}/users/register
+```
+
+Body:
+
+```json
+{
+  "name": "Aman Sharma",
+  "email": "aman.sharma@college.edu",
+  "password": "ama@0099",
+  "confirmPassword": "ama@0099",
+  "role": "professor"
+}
+```
+
+Expected response:
+
+```json
+{
+  "user": {
+    "name": "Aman Sharma",
+    "email": "aman.sharma@college.edu",
+    "role": "professor",
+    "_id": "..."
+  }
+}
+```
+
+### 2. Login And Copy JWT Token
+
+```text
+POST {{baseUrl}}/users/login
+```
+
+Body:
+
+```json
+{
+  "email": "aman.sharma@college.edu",
+  "password": "ama@0099"
+}
+```
+
+Expected response includes a JWT token:
+
+```json
+{
+  "token": "...",
+  "id": "...",
+  "name": "Aman Sharma",
+  "role": "professor"
+}
+```
+
+Copy the `token` value. For professor-only routes, paste it in:
+
+```text
+Authorization -> Bearer Token
+```
+
+### 3. Professor Adds Availability
+
+```text
+POST {{baseUrl}}/professor/availability
+Authorization: Bearer Token = professor token
+```
+
+Body:
+
+```json
+[
+  {
+    "startTime": "2026-06-20T05:15:00.000Z",
+    "endTime": "2026-06-20T06:15:00.000Z"
+  },
+  {
+    "startTime": "2026-06-20T06:30:00.000Z",
+    "endTime": "2026-06-20T07:30:00.000Z"
+  }
+]
+```
+
+Expected response:
+
+```json
+{
+  "message": "2 availability slots added",
+  "availability": [
+    {
+      "id": "...",
+      "professor": "Aman Sharma",
+      "startTimeUtc": "2026-06-20T05:15:00.000Z",
+      "endTimeUtc": "2026-06-20T06:15:00.000Z"
+    }
+  ]
+}
+```
+
+### 4. Student Books A Slot
+
+First login as a student and copy the student JWT token.
+
+```text
+POST {{baseUrl}}/general/book
+Authorization: Bearer Token = student token
+```
+
+Body:
+
+```json
+{
+  "professorId": "PROFESSOR_ID_FROM_REGISTER_OR_LOGIN",
+  "time": "2026-06-20T05:15:00.000Z"
+}
+```
+
+Expected response:
+
+```json
+{
+  "message": "Appointment booked",
+  "appointment": {
+    "id": "...",
+    "student": "Ishan Kapoor",
+    "professor": "Aman Sharma",
+    "timeUtc": "2026-06-20T05:15:00.000Z",
+    "status": "booked"
+  }
+}
+```
+
+### 5. Professor Updates A Free Slot
+
+Use an availability `id` that has no booked appointment inside it.
+
+```text
+PATCH {{baseUrl}}/professor/availability/AVAILABILITY_ID
+Authorization: Bearer Token = professor token
+```
+
+Body:
+
+```json
+{
+  "startTime": "2026-06-21T07:45:00.000Z",
+  "endTime": "2026-06-21T08:45:00.000Z"
+}
+```
+
+Expected response:
+
+```json
+{
+  "message": "Availability updated",
+  "availability": {
+    "id": "...",
+    "professor": "Aman Sharma",
+    "startTimeUtc": "2026-06-21T07:45:00.000Z",
+    "endTimeUtc": "2026-06-21T08:45:00.000Z"
+  }
+}
+```
+
+### 6. Professor Cancels A Student's Booked Appointments
+
+```text
+PATCH {{baseUrl}}/professor/cancel-appointments/STUDENT_ID
+Authorization: Bearer Token = professor token
+```
+
+Expected response:
+
+```json
+{
+  "message": "Appointments cancelled",
+  "cancelledCount": 1
+}
+```
+
+### 7. Student Checks Pending Appointments
+
+```text
+GET {{baseUrl}}/general/appointments
+Authorization: Bearer Token = student token
+```
+
+Expected response after professor cancellation:
+
+```json
+{
+  "message": "No pending appointments",
+  "appointments": []
+}
+```
+
+## EC2 DocumentDB Notes From Deployment
+
+For Amazon DocumentDB, the EC2 `.env` uses `USE_DOCDB=true` and points `DOCDB_CA_FILE` to `./global-bundle.pem`. The app also sets DocumentDB-specific Mongoose options in `index.js`:
+
+```js
+authSource: "admin",
+authMechanism: "SCRAM-SHA-1",
+serverSelectionTimeoutMS: 10000,
+autoIndex: false
+```
+
+Keep the actual `.env`, DocumentDB password, JWT secret, AWS private key, and `global-bundle.pem` out of GitHub.
