@@ -1,14 +1,19 @@
-
 export const notFound = (req, res, next) => {
-    const error = new Error(`Not Found - ${req.originalUrl}`);
-    res.status(404);
-    next(error);
+  const error = new Error(`Not Found - ${req.originalUrl}`);
+  res.status(404);
+  next(error);
 };
 
 export const errorMiddleware = (err, req, res, next) => {
-    const statusCode = err.code || (res.statusCode !== 200 ? res.statusCode : 500);
+  if (res.headersSent) {
+    return next(err);
+  }
 
-    res.status(statusCode).json({
-        message: err.message || "Server Error"
-    });
+  const statusCode = Number.isInteger(err.code)
+    ? err.code
+    : (res.statusCode !== 200 ? res.statusCode : 500);
+
+  res.status(statusCode).json({
+    message: err.message || "Server Error",
+  });
 };

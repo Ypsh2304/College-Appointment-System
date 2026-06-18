@@ -1,9 +1,8 @@
+import mongoose from "mongoose";
+import { Appointment } from "../models/appointment.js";
 import { Availability } from "../models/availability.js";
-import {Appointment} from "../models/appointment.js"
 import { HttpError } from "../models/error.js";
 import { User } from "../models/user.js";
-import mongoose from 'mongoose';
-import moment from 'moment';  
 
 const getAvailableSlots = async (req, res, next) => {
   try {
@@ -14,7 +13,6 @@ const getAvailableSlots = async (req, res, next) => {
     }
 
     const professorObjectId = new mongoose.Types.ObjectId(professorId);
-
     const professor = await User.findOne({
       _id: professorObjectId,
       role: "professor",
@@ -25,7 +23,6 @@ const getAvailableSlots = async (req, res, next) => {
     }
 
     const now = new Date();
-
     const availability = await Availability.find({
       professorId: professorObjectId,
       endTime: { $gt: now },
@@ -78,14 +75,13 @@ const bookAppointment = async (req, res, next) => {
       return next(new HttpError("Invalid professor ID format", 400));
     }
 
-    if (Number.isNaN(new Date(time).getTime())) {
+    const appointmentTime = new Date(time);
+    if (Number.isNaN(appointmentTime.getTime())) {
       return next(new HttpError("Invalid date format for booking time", 400));
     }
 
     const professorObjectId = new mongoose.Types.ObjectId(professorId);
     const studentObjectId = new mongoose.Types.ObjectId(studentId);
-    const formattedTime = moment.utc(time).toDate();
-
     const professor = await User.findOne({
       _id: professorObjectId,
       role: "professor",
@@ -106,38 +102,45 @@ const bookAppointment = async (req, res, next) => {
 
     const availability = await Availability.findOne({
       professorId: professorObjectId,
-      startTime: { $lte: formattedTime },
-      endTime: { $gt: formattedTime },
+      startTime: { $lte: appointmentTime },
+      endTime: { $gt: appointmentTime },
     });
 
     if (!availability) {
-      return next(new HttpError(`Selected time is not available for Professor ${professor.name}`, 400));
+      return next(new HttpError("Selected time is not available", 400));
     }
 
     const existingAppointment = await Appointment.findOne({
       professorId: professorObjectId,
-      time: formattedTime,
+      time: appointmentTime,
       status: "booked",
     });
 
     if (existingAppointment) {
-      return next(new HttpError(`This appointment time is already booked for Professor ${professor.name}`, 400));
+      return next(new HttpError("Appointment time already booked", 400));
     }
 
     const appointment = new Appointment({
       studentId: studentObjectId,
       professorId: professorObjectId,
-      time: formattedTime,
+      time: appointmentTime,
     });
 
     await appointment.save();
 
     res.status(201).json({
-      message: `Appointment booked successfully for Student ${student.name} with Professor ${professor.name}. timeUtc: ${appointment.time.toISOString()}, status: ${appointment.status}`,
+      message: "Appointment booked",
+      appointment: {
+        id: appointment._id.toString(),
+        student: student.name,
+        professor: professor.name,
+        timeUtc: appointment.time.toISOString(),
+        status: appointment.status,
+      },
     });
   } catch (error) {
     if (error.code === 11000) {
-      return next(new HttpError("This appointment time is already booked", 400));
+      return next(new HttpError("Appointment time already booked", 400));
     }
 
     console.error("Error booking appointment:", error);
@@ -145,45 +148,45 @@ const bookAppointment = async (req, res, next) => {
   }
 };
 
+const getStudentAppointments = async (req, res, next) => {
+  try {
+    const studentId = req.user.id;
+    const studentObjectId = new mongoose.Types.ObjectId(studentId);
+    const student = await User.findOne({
+      _id: studentObjectId,
+      role: "student",
+    }).select("name email");
 
-  const getStudentAppointments = async (req, res, next) => {
-    try {
-      const studentId = req.user.id;
-      const studentObjectId = new mongoose.Types.ObjectId(studentId);
-
-      const student = await User.findOne({
-        _id: studentObjectId,
-        role: "student",
-      }).select("name email");
-
-      if (!student) {
-        return next(new HttpError("Student not found", 404));
-      }
-
-      const appointments = await Appointment.find({
-        studentId: studentObjectId,
-        status: 'booked',
-      }).populate('professorId', 'name email');
-
-      if (!appointments || appointments.length === 0) {
-        return next(new HttpError(`Student ${student.name} has no pending appointments`, 404));
-      }
-  
-      const formattedAppointments = appointments.map(appointment => ({
-        professor: appointment.professorId ? appointment.professorId.name : "Professor no longer available",
-        appointmentTimeUtc: appointment.time.toISOString(),
-        status: appointment.status,
-      }));
-  
-      res.status(200).json({
-        message: `Upcoming appointments for Student ${student.name}:`,
-        appointments: formattedAppointments,
-      });
-  
-    } catch (error) {
-      console.error("Error fetching appointments:", error);
-      return next(new HttpError("Failed to retrieve appointments", 500));
+    if (!student) {
+      return next(new HttpError("Student not found", 404));
     }
-  };
+
+    const appointments = await Appointment.find({
+      studentId: studentObjectId,
+      status: "booked",
+    }).populate("professorId", "name email");
+
+    if (!appointments || appointments.length === 0) {
+      return res.status(200).json({
+        message: "No pending appointments",
+        appointments: [],
+      });
+    }
+
+    const formattedAppointments = appointments.map((appointment) => ({
+      professor: appointment.professorId ? appointment.professorId.name : "Professor no longer available",
+      appointmentTimeUtc: appointment.time.toISOString(),
+      status: appointment.status,
+    }));
+
+    res.status(200).json({
+      message: "Pending appointments",
+      appointments: formattedAppointments,
+    });
+  } catch (error) {
+    console.error("Error fetching appointments:", error);
+    return next(new HttpError("Failed to retrieve appointments", 500));
+  }
+};
 
 export { getAvailableSlots, bookAppointment, getStudentAppointments };
